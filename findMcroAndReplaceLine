@@ -1,0 +1,288 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define SIZE_OF_MAX_NAME_MCRO 20
+#define SIZE_OF_MAX_NAME_MCRO_LINE 80
+
+/* Define a linked list node to store content of mcro */
+struct Node {
+    char name[SIZE_OF_MAX_NAME_MCRO]; /* To store the name mcro */
+    char** lines;                     /* 2D array to store lines */
+    int capacity;                     /* Current capacity of the lines array */
+    int num_lines;                    /* Number of lines stored in the 2D array */
+    struct Node* next;               /* Address of the next node */
+};
+
+struct Node* createNode() {
+    int i;
+    int initialLineCount = 10; /* Set the initial line count */
+    struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
+    if (!newNode) {
+        perror("Error:");
+        exit(1);
+    }
+
+    newNode->lines = (char**)malloc(initialLineCount * sizeof(char));
+    if (!newNode->lines) {
+        perror("Error:");
+        exit(1);
+    }
+
+    for (i = 0; i < initialLineCount; i++) {
+        newNode->lines[i] = (char*)malloc(SIZE_OF_MAX_NAME_MCRO_LINE * sizeof(char));
+        if (!newNode->lines[i]) {
+            perror("Error:");
+            exit(1);
+        }
+    }
+
+    newNode->capacity = initialLineCount;
+    newNode->num_lines = 0;
+    newNode->next = NULL;
+
+    return newNode;
+}
+
+void addLine(struct Node* node, const char* line) {
+    int i;
+
+    if (node->num_lines == node->capacity) {
+        int new_capacity = node->capacity * 2;
+        node->lines = (char**)realloc(node->lines, new_capacity * sizeof(char));
+
+        if (!node->lines) {
+            perror("Error:");
+            exit(1);
+        }
+
+        for (i = node->capacity; i < new_capacity; i++) {
+            node->lines[i] = (char*)malloc(SIZE_OF_MAX_NAME_MCRO_LINE * sizeof(char));
+            if (!node->lines[i]) {
+                perror("Error:");
+                exit(1);
+            }
+        }
+
+        node->capacity = new_capacity;
+    }
+
+    strcpy(node->lines[node->num_lines], line);
+    node->num_lines++;
+}
+
+struct Node* readContentUntilEndMcro(const char* filename) {
+    struct Node* head = NULL;
+    struct Node* current = NULL;
+    char mcro[5] = "mcro";
+    char endmcro[8] = "endmcro";
+    char line[SIZE_OF_MAX_NAME_MCRO_LINE];
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        perror("Error:");
+        exit(1);
+    }
+
+    while (fgets(line, sizeof(line), file)) {
+        if (strstr(line, mcro)) {
+            struct Node* newNode = createNode();
+
+            /* Assuming the name is a single word without spaces */
+            sscanf(line, "mcro %s", newNode->name);
+
+            if (!head) {
+                head = newNode;
+                current = newNode;
+            } else {
+                current->next = newNode;
+                current = newNode;
+            }
+
+            /* Read and store lines until "endmcro" is found */
+            while (fgets(line, sizeof(line), file) && !strstr(line, endmcro)) {
+                addLine(current, line);
+            }
+        }
+    }
+
+    fclose(file);
+    return head;
+}
+
+void freeLinkedList(struct Node* head) {
+    int i;
+    while (head) {
+        struct Node* temp = head;
+        head = head->next;
+
+        for (i = 0; i < temp->num_lines; i++) {
+            free(temp->lines[i]);
+        }
+
+        free(temp->lines);
+        free(temp);
+    }
+}
+
+void printLinkedList(struct Node* head) {
+    int i;
+    while (head) {
+        printf("Name: %s\n", head->name);
+        for (i = 0; i < head->num_lines; i++) {
+            printf("%s", head->lines[i]);
+        }
+        head = head->next;
+    }
+}
+
+int searchNameReplaceNodeContect(const char* name, const struct Node* head, const char* filename)
+{
+    char line[SIZE_OF_MAX_NAME_MCRO_LINE];
+    int lineCount = 0;
+    int found = 0;
+    char* tempFilename = "tempFile.txt";
+    FILE* tempFile = fopen(tempFilename, "w");
+    FILE* file = fopen(filename, "r");
+
+    if (!file) {
+        perror("Error:");
+        exit(1);
+    }
+
+    if (!tempFile) {
+        perror("Error:");
+        fclose(file);
+        exit(1);
+    }
+
+    while (fgets(line, sizeof(line), file)) {
+        lineCount++;
+
+        if (strstr(line, name)) {
+            struct Node* current = head;
+            while (current) 
+            {
+                if (strcmp(current->name, name) == 0)
+                {
+                    for (int i = 0; i < current->num_lines; i++) 
+                    {
+                        fputs(current->lines[i], tempFile);
+                    }
+                    found = 1;
+                    break;
+                }
+                current = current->next;
+            }
+        } else {
+            fputs(line, tempFile);
+        }
+    }
+
+    fclose(file);
+    fclose(tempFile);
+
+    if (found)
+    {
+        /* Replace the original file with the tempFile*/
+        remove(filename);
+        rename(tempFilename, filename);
+    } 
+    else
+    {
+        remove(tempFilename);
+    }
+
+    return found;
+}
+
+void removeMcroLines(const char* filename) {
+    FILE* file;
+    FILE* tempFile;
+    char line[1000];
+    int i;
+    int isMacro = 0;     /* Flag to check if the line is macro */
+    int doneMacro = 0;   /* Flag to check if the line is endmacro */
+
+    /* Open the input file */
+    file = fopen(filename, "r");
+    if (file == NULL) {
+        printf("Error opening the file.\n");
+        return;
+    }
+
+    /* Open a temporary file for writing */
+    tempFile = fopen("tempfile.txt", "w");
+    if (tempFile == NULL) {
+        printf("Error creating temporary file.\n");
+        fclose(file);
+        return;
+    }
+
+    /* Copy the input file to the temporary file, excluding macro lines */
+    while (fgets(line, sizeof(line), file) != NULL) {
+        doneMacro = 0;
+        for (i = 0; line[i] != '\0'; i++) {
+            if (strncmp(&line[i], "mcro", 4) == 0) {
+                isMacro = 1;
+                break;
+            }
+            if (strncmp(&line[i], "endmcro", 7) == 0) {
+                isMacro = 0;
+                doneMacro = 1;
+                break;
+            }
+        }
+
+        if (!isMacro && !doneMacro) {
+            fputs(line, tempFile);
+        }
+    }
+
+    /* Close the input file */
+    fclose(file);
+
+    /* Close the temporary file */
+    fclose(tempFile);
+
+    /* Remove the original file and rename the temporary file */
+    remove(filename);
+    rename("tempfile.txt", filename);
+
+    printf("Macro lines removed successfully from the file.\n");
+}
+
+int main() {
+    char* filename;
+    filename = "inputFile.txt";
+    struct Node* head = readContentUntilEndMcro(filename);
+    removeMcroLines(filename);
+    FILE* writeFile = fopen("writeFile.txt", "w");
+
+    if (!writeFile) {
+        perror("Error:");
+        exit(1);
+    }
+
+    struct Node* current = head;  // Add this line to keep track of the current node
+
+    while (current) {  // Loop through all nodes
+        printf("Content between 'mcro' and 'endmcro':\n");
+        printLinkedList(current);
+
+        if (searchNameReplaceNodeContect(current->name, head, filename)) {
+            /* Replace the name with the content lines from the node */
+            printf("The name '%s' exists in '%s'.\n", current->name, filename);
+        } else {
+            printf("The name '%s' does not exist in '%s'.\n", current->name, filename);
+        }
+
+        fclose(writeFile);
+
+        /* Move to the next node and free the memory allocated for the linked list */
+        struct Node* temp = current;
+        current = current->next;
+        freeLinkedList(temp);
+    }
+
+    return 0;
+}
